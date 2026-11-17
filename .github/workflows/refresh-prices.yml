@@ -1,0 +1,63 @@
+name: Refresh prices
+on:
+  schedule:
+    - cron: "10 1 * * *"
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Sources to refresh (tcg, ct, shops)"
+        default: "ct,shops"
+permissions:
+  contents: write
+concurrency:
+  group: refresh-prices
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BOT: -c user.name=deckhand-bot -c user.email=deckhand-bot@users.noreply.github.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Take the latest script and store list from the website
+        run: |
+          B=https://tcgdeckhand.net/bootstrap
+          mkdir -p state
+          for f in refresh_prices.py embed_snapshot.py stores.json README.md; do
+            if curl -fsSL "$B/$f" -o "$f.new"; then mv "$f.new" "$f"; else rm -f "$f.new"; fi
+          done
+          python3 -m py_compile refresh_prices.py || git checkout -- refresh_prices.py
+          python3 -c "import json; json.load(open('stores.json'))" || git checkout -- stores.json
+          [ -f prices.json ] || curl -fsSL "$B/prices.json" -o prices.json
+          [ -f state/tcg.json ] || curl -fsSL "$B/tcg-state.json" -o state/tcg.json
+          [ -f .gitignore ] || curl -fsSL "$B/gitignore.txt" -o .gitignore
+          git add -A
+          if ! git diff --cached --quiet; then git $BOT commit -q -m "Update price refresh files" && git push -q; fi
+      - name: Start from the last published prices
+        run: |
+          if git fetch -q --depth=1 origin live 2>/dev/null; then git checkout FETCH_HEAD -- prices.json state/tcg.json; fi
+      - name: Refresh
+        env:
+          TCGAPI_KEY: ${{ secrets.TCGAPI_KEY }}
+          CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          PICKED: ${{ inputs.sources }}
+        run: |
+          SRC="ct,shops"
+          [ "$EVENT" = "workflow_dispatch" ] && SRC="$PICKED"
+          [ "$SCHEDULE" = "10 1 * * *" ] && SRC="tcg,ct,shops"
+          python3 refresh_prices.py --sources "$SRC"
+      - name: Publish prices.json to the live branch
+        run: |
+          mkdir -p /tmp/live/state
+          cp prices.json /tmp/live/ && cp state/tcg.json /tmp/live/state/
+          cd /tmp/live && git init -q -b live && git add -A
+          git $BOT commit -q -m "Prices $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" live
+      - name: Daily note on main (keeps the schedule active)
+        if: github.event.schedule == '10 1 * * *'
+        run: |
+          date -u > last-run.txt && git add last-run.txt
+          git $BOT commit -q -m "Daily run" -- last-run.txt && git push -q
