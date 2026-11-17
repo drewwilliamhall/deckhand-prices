@@ -1,0 +1,138 @@
+[
+ {
+  "id": "levelup",
+  "url": "https://www.levelupgamesmd.com",
+  "currency": "USD"
+ },
+ {
+  "id": "401",
+  "url": "https://store.401games.ca",
+  "currency": "CAD"
+ },
+ {
+  "id": "danireon",
+  "url": "https://www.danireon.com",
+  "currency": "USD"
+ },
+ {
+  "id": "totalcards",
+  "url": "https://totalcards.net",
+  "currency": "GBP"
+ },
+ {
+  "id": "cherry",
+  "url": "https://www.cherrycollectables.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "mayhem",
+  "url": "https://www.mayhemcollectables.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "skybox",
+  "url": "https://skyboxct.com",
+  "currency": "USD"
+ },
+ {
+  "id": "zulus",
+  "url": "https://zulusgames.com",
+  "currency": "USD"
+ },
+ {
+  "id": "hobbiesville",
+  "url": "https://hobbiesville.com",
+  "currency": "USD"
+ },
+ {
+  "id": "fantasia",
+  "url": "https://www.fantasiacards.de",
+  "currency": "EUR"
+ },
+ {
+  "id": "kamehouse",
+  "url": "https://kamehousecards.com",
+  "currency": "EUR"
+ },
+ {
+  "id": "tcmasters",
+  "url": "https://www.tradingcardmasters.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "urbanempire",
+  "url": "https://urbanempirecollectables.com",
+  "currency": "AUD"
+ },
+ {
+  "id": "hpwcards",
+  "url": "https://hpwcards.com",
+  "currency": "USD"
+ },
+ {
+  "id": "cardboarddie",
+  "url": "https://cardboardanddie.com",
+  "currency": "USD"
+ },
+ {
+  "id": "opsingles",
+  "url": "https://onepiecesingles.com",
+  "currency": "USD",
+  "one_piece_only": true
+ },
+ {
+  "id": "deckout",
+  "url": "https://deckoutgaming.ca",
+  "currency": "CAD"
+ },
+ {
+  "id": "levelupca",
+  "url": "https://levelupgames.ca",
+  "currency": "CAD"
+ },
+ {
+  "id": "universcarte",
+  "url": "https://luniversdelacarte.ca",
+  "currency": "CAD"
+ },
+ {
+  "id": "herocards",
+  "url": "https://www.herocards.co.uk",
+  "currency": "GBP"
+ },
+ {
+  "id": "grandline",
+  "url": "https://grandlinecollectiblesltd.com",
+  "currency": "GBP"
+ },
+ {
+  "id": "ozzie",
+  "url": "https://www.ozziecollectables.com",
+  "currency": "AUD"
+ },
+ {
+  "id": "trollaus",
+  "url": "https://www.trollaustralia.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "mintcoll",
+  "url": "https://mintcollectables.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "millennium",
+  "url": "https://millenniumcomics.com.au",
+  "currency": "AUD"
+ },
+ {
+  "id": "recollectibles",
+  "url": "https://recollectibles.de",
+  "currency": "EUR"
+ },
+ {
+  "id": "gameacademia",
+  "url": "https://game-academia.myshopify.com",
+  "currency": "USD"
+ }
+]
