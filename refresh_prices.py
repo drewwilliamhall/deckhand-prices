@@ -631,6 +631,7 @@ class Cart:
     def __init__(self, base, timeout=30):
         self.base, self.timeout = base, timeout
         self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.trace = []
 
     def call(self, path, data=None, json_body=None, method=None):
         h = {"User-Agent": UA, "Accept": "application/json"}
@@ -640,12 +641,18 @@ class Cart:
         elif data is not None:
             body, h["Content-Type"] = urlencode(data).encode(), "application/x-www-form-urlencoded"
         req = urllib.request.Request(self.base + path, data=body, headers=h, method=method)
+        name = path.split("?")[0].rsplit("/", 1)[-1]
         try:
             with self.op.open(req, timeout=self.timeout) as r:
                 raw = r.read().decode("utf-8", "replace")
+                self.trace.append(f"{name}:{r.status}")
                 return r.status, (json.loads(raw) if raw.strip().startswith(("{", "[")) else None)
         except urllib.error.HTTPError as e:
+            self.trace.append(f"{name}:{e.code}")
             return e.code, None
+        except Exception as e:
+            self.trace.append(f"{name}:{type(e).__name__}")
+            return 0, None
 
     def clear(self):
         self.call("/cart/clear.js", json_body={}, method="POST")
@@ -710,14 +717,14 @@ def ship_probe(store, products, fx, delay=1.0):
             if price > 0:
                 cands.append((-op, price, v["id"]))
     if not cands:
-        return {}
+        return {}, "no in-stock item to quote with"
     cands.sort()
     single = cands[0][2]                                # cheapest in-stock item, One Piece first
     by_price = sorted((c[1], c[2]) for c in cands)
     cart, out = Cart(base), {}
     try:
         if not cart.fill(single):
-            return {}
+            return {}, "could not add an item to a cart (" + " ".join(cart.trace) + ")"
         for region in store.get("regions") or []:
             if region not in SHIP_TO:
                 continue
@@ -747,7 +754,32 @@ def ship_probe(store, products, fx, delay=1.0):
                         out[region]["free"] = claim if best[0] == 0 else 0   # 0 = tested: not free
     finally:
         cart.clear()
-    return out
+    return out, ("" if out else "no quote returned (" + " ".join(cart.trace[-6:]) + ")")
+
+
+OP_COLLECTION = re.compile(r"one[\s_-]*piece|optcg", re.I)
+NOT_CARDS = re.compile(r"manga|figure|anime|plush|apparel|book|dvd|blu-?ray|poster|keychain|cosplay|model kit", re.I)
+
+
+def one_piece_collections(base, delay=1.0):
+    """Paths of a store's One Piece card collections, or [] if it has none we can tell."""
+    found = []
+    for page in range(1, 6):
+        try:
+            d, _ = http_json(f"{base}/collections.json?limit=250&page={page}", timeout=20, retries=1)
+        except Exception:
+            break
+        cols = d.get("collections") if isinstance(d, dict) else None
+        if not cols:
+            break
+        for c in cols:
+            label = f"{c.get('title') or ''} {c.get('handle') or ''}"
+            if OP_COLLECTION.search(label) and not NOT_CARDS.search(label) and (c.get("products_count") or 1) > 0:
+                found.append((c.get("products_count") or 0, c["handle"]))
+        time.sleep(delay)
+    # broad collections first; skip near-duplicates of each other by handle
+    found.sort(reverse=True)
+    return [f"/collections/{h}/products.json" for _n, h in found[:6]]
 
 
 def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0, ship=False):
@@ -765,27 +797,36 @@ def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0, ship=False):
             except Exception:
                 pass
             time.sleep(delay)
-            for page in range(1, max_pages + 1):
-                d, _ = http_json(f"{base}/products.json?limit=250&page={page}", timeout=30, retries=2)
-                items = d.get("products") if isinstance(d, dict) else None
-                if not items:
-                    break
-                products += items
-                time.sleep(delay)
+            sources = one_piece_collections(base, delay)
+            focused = bool(sources)
+            seen = set()
+            for path in (sources or ["/products.json"]):
+                for page in range(1, max_pages + 1):
+                    sep = "&" if "?" in path else "?"
+                    d, _ = http_json(f"{base}{path}{sep}limit=250&page={page}", timeout=30, retries=2)
+                    items = d.get("products") if isinstance(d, dict) else None
+                    if not items:
+                        break
+                    for it in items:
+                        if it.get("id") not in seen:
+                            seen.add(it.get("id"))
+                            products.append(it)
+                    time.sleep(delay)
         except Exception as e:
             err = str(e)[:100]
         rate = rates.get(cur)
         if products and rate:
-            out[sid] = shop_match(products, cat, rate, st.get("one_piece_only", False))
+            out[sid] = shop_match(products, cat, rate, st.get("one_piece_only", False) or focused)
             info[sid] = {"updated": iso(), "n": len(out[sid]), "currency": cur}
-            log(f"  [{i}/{len(stores)}] {sid}: {len(products)} products, {len(out[sid])} matched ({cur})")
+            log(f"  [{i}/{len(stores)}] {sid}: {len(products)} products"
+                f"{' in its One Piece collections' if focused else ''}, {len(out[sid])} matched ({cur})")
             if ship and out[sid]:
                 try:
-                    q = ship_probe(dict(st, currency=cur), products, rates, delay)
+                    q, why = ship_probe(dict(st, currency=cur), products, rates, delay)
                     if q:
                         shipping[sid] = q
                     log(f"      shipping: " + (", ".join(f"{r} " + (f"${v['c']:.2f}" if 'c' in v else "none")
-                                                     for r, v in q.items()) or "no quote"))
+                                                     for r, v in q.items()) or why))
                 except Exception as e:
                     log(f"      shipping: failed ({str(e)[:80]})")
         else:
@@ -820,6 +861,29 @@ def fx_rates(prev):
 
 
 # --------------------------------------------------------------------------
+def probe(a, n=4):
+    """Quick check, writes nothing: collections and a shipping quote for a few stores."""
+    stores = read_json(a.stores, [])
+    picks = [s for s in stores if s["id"] in ("cardboarddie", "levelup", "hpwcards", "tapsgames")][:n]
+    rates, _ = fx_rates({})
+    for st in picks:
+        base = st["url"].rstrip("/")
+        log(f"== {st['id']} {base}")
+        cols = one_piece_collections(base)
+        log(f"   One Piece collections: {cols or 'none found'}")
+        path = cols[0] if cols else "/products.json"
+        try:
+            d, _ = http_json(f"{base}{path}{'&' if '?' in path else '?'}limit=250&page=1", timeout=30)
+            prods = d.get("products") or []
+        except Exception as e:
+            log(f"   products: failed {e}")
+            continue
+        log(f"   products on page 1: {len(prods)}")
+        q, why = ship_probe(dict(st, currency=st.get("currency") or "USD"), prods, rates, 1.0)
+        log(f"   shipping: {json.dumps(q) if q else why}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Refresh TCG Deckhand prices.json")
     ap.add_argument("--sources", default="tcg,ct,shops",
@@ -834,6 +898,8 @@ def main():
     a = ap.parse_args()
     load_env(os.path.join(HERE, ".env"))
     want = {s.strip() for s in a.sources.split(",") if s.strip()}
+    if "probe" in want:
+        return probe(a)
     prev = read_json(a.out, {})
     src = dict(prev.get("sources") or {})
     today = now().strftime("%Y-%m-%d")
@@ -923,8 +989,11 @@ def main():
                 if ship_due:
                     keep = {k: v for k, v in shipping.items() if k not in new_ship and k in {s["id"] for s in stores}}
                     shipping = dict(keep, **new_ship)
-                    src["ship"] = {"updated": iso(), "stores": len(new_ship),
-                                   "quotes": sum(len(v) for v in new_ship.values())}
+                    if new_ship:
+                        src["ship"] = {"updated": iso(), "stores": len(new_ship),
+                                       "quotes": sum(len(v) for v in new_ship.values())}
+                    else:
+                        problems.append("ship: no store returned a shipping quote")
                     log(f"ship: quotes from {len(new_ship)} stores")
             shops = {k: v for k, v in shops.items() if v}
             stamps = [v["updated"] for v in info.values() if v.get("updated")]
