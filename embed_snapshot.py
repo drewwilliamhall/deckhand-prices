@@ -12,7 +12,7 @@ Safe to run again and again. Each run:
 import argparse, json, re, sys
 
 MARK = "window.LIVE_PRICES"
-TABLES = ["SHOP_PRICES", "DATA", "UPCOMING", "CT_PRICES"]
+TABLES = ["SHOP_PRICES", "DATA", "UPCOMING", "CT_PRICES", "SHIPPING"]
 
 BOOT = r"""
 <script id="live-boot">
@@ -85,7 +85,7 @@ def main():
     for path in a.html:
         html = open(path, encoding="utf-8").read()
         for t in TABLES:
-            html = swap_table(html, t, P[t])
+            html = swap_table(html, t, P.get(t, {}))
         if 'id="app-src"' not in html:
             # 1. the app script waits for the loader
             i = html.rindex("<script>")

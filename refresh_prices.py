@@ -15,9 +15,9 @@ Standard library only. Keys come from the environment, or from a .env file next
 to this script (never commit that file). Each source is independent: if one fails,
 the previous numbers for that source are kept and the others still update.
 """
-import argparse, datetime as dt, json, os, re, sys, time, urllib.error, urllib.request
+import argparse, datetime as dt, http.cookiejar, json, os, re, sys, time, urllib.error, urllib.request
 from collections import Counter, defaultdict
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = "TCGDeckhandBot/1.0 (+https://tcgdeckhand.net; hello@tcgdeckhand.net)"
@@ -70,9 +70,15 @@ def http_json(url, headers=None, timeout=45, retries=2):
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8", "replace")), resp.headers
         except urllib.error.HTTPError as e:
-            if e.code in (500, 502, 503, 504) and attempt < retries:
+            if e.code in (429, 500, 502, 503, 504) and attempt < retries:
                 last = e
-                time.sleep(3 * (attempt + 1))
+                pause = 3 * (attempt + 1)
+                if e.code == 429:   # asked to slow down: wait as long as the site says, within reason
+                    try:
+                        pause = min(60, max(10, int(e.headers.get("Retry-After") or 20)))
+                    except (TypeError, ValueError):
+                        pause = 20
+                time.sleep(pause)
                 continue
             raise HttpError(e.code, url.split("?")[0])
         except Exception as e:  # timeouts, DNS, bad JSON
@@ -602,9 +608,151 @@ def guess_currency(url, regions=""):
     return {"us": "USD", "ca": "CAD", "uk": "GBP", "au": "AUD", "eu": "EUR"}.get(first, "USD")
 
 
-def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0):
+# --------------------------------------------------------------------------
+# Real shipping quotes (Shopify stores)
+# --------------------------------------------------------------------------
+# One address per region the app knows about. The quote is what the store's own
+# checkout would charge for a one-item order sent there.
+SHIP_TO = {
+    "us": {"country": "United States", "province": "New York", "zip": "10001"},
+    "ca": {"country": "Canada", "province": "Ontario", "zip": "M5V 2T6"},
+    "uk": {"country": "United Kingdom", "province": "", "zip": "SW1A 1AA"},
+    "eu": {"country": "Germany", "province": "", "zip": "10115"},
+    "au": {"country": "Australia", "province": "New South Wales", "zip": "2000"},
+    "me": {"country": "Saudi Arabia", "province": "", "zip": "12211"},
+    "intl": {"country": "Singapore", "province": "", "zip": "018956"},
+}
+
+
+class Cart:
+    """A throwaway shopping cart on one store, used only to ask for shipping quotes.
+    Nothing is ever ordered; the cart is emptied afterwards."""
+
+    def __init__(self, base, timeout=30):
+        self.base, self.timeout = base, timeout
+        self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+    def call(self, path, data=None, json_body=None, method=None):
+        h = {"User-Agent": UA, "Accept": "application/json"}
+        body = None
+        if json_body is not None:
+            body, h["Content-Type"] = json.dumps(json_body).encode(), "application/json"
+        elif data is not None:
+            body, h["Content-Type"] = urlencode(data).encode(), "application/x-www-form-urlencoded"
+        req = urllib.request.Request(self.base + path, data=body, headers=h, method=method)
+        try:
+            with self.op.open(req, timeout=self.timeout) as r:
+                raw = r.read().decode("utf-8", "replace")
+                return r.status, (json.loads(raw) if raw.strip().startswith(("{", "[")) else None)
+        except urllib.error.HTTPError as e:
+            return e.code, None
+
+    def clear(self):
+        self.call("/cart/clear.js", json_body={}, method="POST")
+
+    def fill(self, variant_id, qty=1):
+        self.clear()
+        st, _ = self.call("/cart/add.js", json_body={"id": variant_id, "quantity": qty}, method="POST")
+        return st == 200
+
+    def rates(self, addr, polls=8):
+        q = urlencode({"shipping_address[country]": addr["country"],
+                       "shipping_address[province]": addr["province"],
+                       "shipping_address[zip]": addr["zip"]})
+        st, _ = self.call("/cart/prepare_shipping_rates.json?" + q, json_body={}, method="POST")
+        if st not in (200, 202):
+            return None
+        for _ in range(polls):
+            time.sleep(1.5)
+            st, d = self.call("/cart/async_shipping_rates.json?" + q)
+            if st == 200 and isinstance(d, dict) and "shipping_rates" in d:
+                return d["shipping_rates"]
+            if st not in (200, 202):
+                return None
+        return None
+
+
+def cheapest_rate(rate_list, fx):
+    """-> (USD cost, [min, max] days or None, service name) for the cheapest option."""
+    best = None
+    for r in rate_list or []:
+        try:
+            amount = float(r.get("price"))
+        except (TypeError, ValueError):
+            continue
+        cur = (r.get("currency") or "USD").upper()
+        if not fx.get(cur):
+            continue
+        usd = amount / fx[cur]
+        days = r.get("delivery_days")
+        days = [int(days[0]), int(days[-1])] if isinstance(days, list) and days and days[0] is not None else None
+        if best is None or usd < best[0]:
+            best = (round(usd, 2), days, (r.get("presentment_name") or r.get("name") or "")[:40])
+    return best
+
+
+def ship_probe(store, products, fx, delay=1.0):
+    """Ask one store for real shipping quotes to each region it sells to.
+    Returns {region: {"c": usd, "d": [min,max] | None, "svc": name, "free": usd | None}}
+    or {region: {"no": 1}} where the store offers no delivery there."""
+    base = store["url"].rstrip("/")
+    cands = []
+    for p in products:
+        title = (p.get("title") or "") + " " + (p.get("product_type") or "")
+        op = 1 if (store.get("one_piece_only") or ONE_PIECE.search(title)) else 0
+        for v in p.get("variants") or []:
+            if v.get("available") is not True or v.get("requires_shipping") is False:
+                continue
+            try:
+                price = float(v.get("price"))
+            except (TypeError, ValueError):
+                continue
+            if price > 0:
+                cands.append((-op, price, v["id"]))
+    if not cands:
+        return {}
+    cands.sort()
+    single = cands[0][2]                                # cheapest in-stock item, One Piece first
+    by_price = sorted((c[1], c[2]) for c in cands)
+    cart, out = Cart(base), {}
+    try:
+        if not cart.fill(single):
+            return {}
+        for region in store.get("regions") or []:
+            if region not in SHIP_TO:
+                continue
+            time.sleep(delay)
+            got = cart.rates(SHIP_TO[region])
+            if got is None:
+                continue                                # couldn't ask: leave unknown
+            best = cheapest_rate(got, fx)
+            if got == [] or best is None:
+                out[region] = {"no": 1}
+                continue
+            out[region] = {"c": best[0], "d": best[1], "svc": best[2], "free": None}
+        # free-shipping threshold, where the vendor list claims one: test it with a real
+        # basket just over that amount, in the store's own currency
+        claim = store.get("free_over_usd")
+        cur = store.get("currency") or "USD"
+        paid = [r for r, q in out.items() if "c" in q and q["c"] > 0]
+        if claim and paid and fx.get(cur):
+            want = claim * fx[cur] * 1.03
+            pick = next((vid for price, vid in by_price if want <= price <= want * 4), None)
+            if pick and cart.fill(pick):
+                for region in paid:
+                    time.sleep(delay)
+                    got = cart.rates(SHIP_TO[region])
+                    best = cheapest_rate(got, fx) if got else None
+                    if best is not None:
+                        out[region]["free"] = claim if best[0] == 0 else 0   # 0 = tested: not free
+    finally:
+        cart.clear()
+    return out
+
+
+def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0, ship=False):
     """One polite pass over each store. Keeps a store's earlier prices if it can't be reached."""
-    out, info = {}, {}
+    out, info, shipping = {}, {}, {}
     old_info = (prev.get("sources", {}).get("shops", {}) or {}).get("stores", {})
     for i, st in enumerate(stores, 1):
         sid, base = st["id"], st["url"].rstrip("/")
@@ -616,8 +764,9 @@ def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0):
                 cur = (meta.get("currency") or cur).upper()
             except Exception:
                 pass
+            time.sleep(delay)
             for page in range(1, max_pages + 1):
-                d, _ = http_json(f"{base}/products.json?limit=250&page={page}", timeout=30, retries=1)
+                d, _ = http_json(f"{base}/products.json?limit=250&page={page}", timeout=30, retries=2)
                 items = d.get("products") if isinstance(d, dict) else None
                 if not items:
                     break
@@ -630,6 +779,15 @@ def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0):
             out[sid] = shop_match(products, cat, rate, st.get("one_piece_only", False))
             info[sid] = {"updated": iso(), "n": len(out[sid]), "currency": cur}
             log(f"  [{i}/{len(stores)}] {sid}: {len(products)} products, {len(out[sid])} matched ({cur})")
+            if ship and out[sid]:
+                try:
+                    q = ship_probe(dict(st, currency=cur), products, rates, delay)
+                    if q:
+                        shipping[sid] = q
+                    log(f"      shipping: " + (", ".join(f"{r} " + (f"${v['c']:.2f}" if 'c' in v else "none")
+                                                     for r, v in q.items()) or "no quote"))
+                except Exception as e:
+                    log(f"      shipping: failed ({str(e)[:80]})")
         else:
             keep = prev.get("SHOP_PRICES", {}).get(sid)
             stamp = (old_info.get(sid) or {}).get("updated", "")
@@ -639,7 +797,7 @@ def shops_fetch(stores, cat, rates, prev, max_pages=20, delay=1.0):
                 out[sid], info[sid] = keep, dict(old_info[sid], note="kept: " + (err or "no data"))
             log(f"  [{i}/{len(stores)}] {sid}: no update ({err or 'no products'})")
         time.sleep(delay)
-    return out, info
+    return out, info, shipping
 
 
 def fx_rates(prev):
@@ -664,7 +822,8 @@ def fx_rates(prev):
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="Refresh TCG Deckhand prices.json")
-    ap.add_argument("--sources", default="tcg,ct,shops")
+    ap.add_argument("--sources", default="tcg,ct,shops",
+                    help="tcg, ct, shops; add ship to force shipping quotes (they also run once a day by themselves)")
     ap.add_argument("--out", default=os.path.join(HERE, "prices.json"))
     ap.add_argument("--state", default=os.path.join(HERE, "state", "tcg.json"))
     ap.add_argument("--stores", default=os.path.join(HERE, "stores.json"))
@@ -736,6 +895,10 @@ def main():
 
     # --- Stores ---
     shops = prev.get("SHOP_PRICES") or {}
+    shipping = prev.get("SHIPPING") or {}
+    last_ship = (src.get("ship") or {}).get("updated", "")
+    ship_due = "ship" in want or (not last_ship or
+        (now() - dt.datetime.strptime(last_ship, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)).total_seconds() > 20 * 3600)
     if "shops" in want:
         cat = shop_catalog(data, upcoming)
         stores = read_json(a.stores, [])
@@ -755,8 +918,14 @@ def main():
                         info[st["id"]] = {"updated": iso(dt.datetime.fromtimestamp(os.path.getmtime(a.shop_raw), dt.timezone.utc)),
                                           "n": len(shops[st["id"]]), "note": "saved feed"}
             else:
-                log(f"shops: {len(stores)} stores")
-                shops, info = shops_fetch(stores, cat, rates, prev, a.max_pages)
+                log(f"shops: {len(stores)} stores" + (" (with shipping quotes)" if ship_due else ""))
+                shops, info, new_ship = shops_fetch(stores, cat, rates, prev, a.max_pages, ship=ship_due)
+                if ship_due:
+                    keep = {k: v for k, v in shipping.items() if k not in new_ship and k in {s["id"] for s in stores}}
+                    shipping = dict(keep, **new_ship)
+                    src["ship"] = {"updated": iso(), "stores": len(new_ship),
+                                   "quotes": sum(len(v) for v in new_ship.values())}
+                    log(f"ship: quotes from {len(new_ship)} stores")
             shops = {k: v for k, v in shops.items() if v}
             stamps = [v["updated"] for v in info.values() if v.get("updated")]
             src["shops"] = {"updated": (min(stamps) if a.shop_raw and stamps else iso()), "stores": info,
@@ -766,7 +935,7 @@ def main():
             problems.append(f"shops: {e}")
 
     out = {"v": 1, "generated": iso(), "sources": src, "DATA": data, "UPCOMING": upcoming,
-           "CT_PRICES": ct, "SHOP_PRICES": shops}
+           "CT_PRICES": ct, "SHOP_PRICES": shops, "SHIPPING": shipping}
     write_json(a.out, out)
     log(f"wrote {a.out}: {len(data['cards'])} cards, {len(data['sealed'])} sealed, "
         f"{len(ct)} CardTrader prices, {sum(len(v) for v in shops.values())} store prices")

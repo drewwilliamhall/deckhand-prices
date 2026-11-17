@@ -2,137 +2,348 @@
  {
   "id": "levelup",
   "url": "https://www.levelupgamesmd.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us"
+  ]
  },
  {
   "id": "401",
   "url": "https://store.401games.ca",
-  "currency": "CAD"
+  "currency": "CAD",
+  "regions": [
+   "us",
+   "ca"
+  ]
  },
  {
   "id": "danireon",
   "url": "https://www.danireon.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us",
+   "ca"
+  ]
  },
  {
   "id": "totalcards",
   "url": "https://totalcards.net",
-  "currency": "GBP"
+  "currency": "GBP",
+  "regions": [
+   "uk",
+   "eu"
+  ],
+  "free_over_usd": 60.0
  },
  {
   "id": "cherry",
   "url": "https://www.cherrycollectables.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "mayhem",
   "url": "https://www.mayhemcollectables.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "skybox",
   "url": "https://skyboxct.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us"
+  ],
+  "free_over_usd": 200.0
  },
  {
   "id": "zulus",
   "url": "https://zulusgames.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us"
+  ]
  },
  {
   "id": "hobbiesville",
   "url": "https://hobbiesville.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us",
+   "ca"
+  ]
  },
  {
   "id": "fantasia",
   "url": "https://www.fantasiacards.de",
-  "currency": "EUR"
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ],
+  "free_over_usd": 80.0
  },
  {
   "id": "kamehouse",
   "url": "https://kamehousecards.com",
-  "currency": "EUR"
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ],
+  "free_over_usd": 90.0
  },
  {
   "id": "tcmasters",
   "url": "https://www.tradingcardmasters.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "urbanempire",
   "url": "https://urbanempirecollectables.com",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
+ },
+ {
+  "id": "cashcards",
+  "url": "https://cashcardsunlimited.com",
+  "currency": "USD",
+  "regions": [
+   "us"
+  ]
  },
  {
   "id": "hpwcards",
   "url": "https://hpwcards.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us"
+  ]
  },
  {
   "id": "cardboarddie",
   "url": "https://cardboardanddie.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "us"
+  ]
  },
  {
   "id": "opsingles",
   "url": "https://onepiecesingles.com",
   "currency": "USD",
-  "one_piece_only": true
+  "one_piece_only": true,
+  "regions": [
+   "us",
+   "ca"
+  ]
  },
  {
   "id": "deckout",
   "url": "https://deckoutgaming.ca",
-  "currency": "CAD"
+  "currency": "CAD",
+  "regions": [
+   "ca",
+   "us"
+  ]
+ },
+ {
+  "id": "gtgames",
+  "url": "https://gtgames.ca",
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
+ },
+ {
+  "id": "desertcity",
+  "url": "https://www.desertcitygamestcg.ca",
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
+ },
+ {
+  "id": "tapsgames",
+  "url": "https://tapsgames.com",
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
+ },
+ {
+  "id": "derpycards",
+  "url": "https://derpycards.com",
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
  },
  {
   "id": "levelupca",
   "url": "https://levelupgames.ca",
-  "currency": "CAD"
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
  },
  {
   "id": "universcarte",
   "url": "https://luniversdelacarte.ca",
-  "currency": "CAD"
+  "currency": "CAD",
+  "regions": [
+   "ca"
+  ]
  },
  {
   "id": "herocards",
   "url": "https://www.herocards.co.uk",
-  "currency": "GBP"
+  "currency": "GBP",
+  "regions": [
+   "uk"
+  ]
+ },
+ {
+  "id": "gatheringpoint",
+  "url": "https://gatheringpointgames.co.uk",
+  "currency": "GBP",
+  "regions": [
+   "uk"
+  ]
  },
  {
   "id": "grandline",
   "url": "https://grandlinecollectiblesltd.com",
-  "currency": "GBP"
+  "currency": "GBP",
+  "regions": [
+   "uk"
+  ]
  },
  {
   "id": "ozzie",
   "url": "https://www.ozziecollectables.com",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "trollaus",
   "url": "https://www.trollaustralia.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
+ },
+ {
+  "id": "thatgame",
+  "url": "https://thatgamestore.com.au",
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
+ },
+ {
+  "id": "generalgames",
+  "url": "https://www.generalgames.com.au",
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "mintcoll",
   "url": "https://mintcollectables.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
+ },
+ {
+  "id": "elemental",
+  "url": "https://elementalarcade.com.au",
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
+ },
+ {
+  "id": "guf",
+  "url": "https://guf.com.au",
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "millennium",
   "url": "https://millenniumcomics.com.au",
-  "currency": "AUD"
+  "currency": "AUD",
+  "regions": [
+   "au"
+  ]
  },
  {
   "id": "recollectibles",
   "url": "https://recollectibles.de",
-  "currency": "EUR"
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ]
+ },
+ {
+  "id": "starz",
+  "url": "https://starzcollectibles.de",
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ]
+ },
+ {
+  "id": "cardcosmos",
+  "url": "https://cardcosmos.de",
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ]
+ },
+ {
+  "id": "cardzone",
+  "url": "https://cardzone.es",
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ]
+ },
+ {
+  "id": "otakura",
+  "url": "https://otakura.it",
+  "currency": "EUR",
+  "regions": [
+   "eu"
+  ]
+ },
+ {
+  "id": "greengate",
+  "url": "https://shop.greengatehobbies.com",
+  "currency": "PHP",
+  "regions": [
+   "intl"
+  ]
  },
  {
   "id": "gameacademia",
   "url": "https://game-academia.myshopify.com",
-  "currency": "USD"
+  "currency": "USD",
+  "regions": [
+   "intl"
+  ]
  }
 ]
